@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flowai.local/schemas/team-registry/event.team_created.schema.json",
+  "title": "Team created",
+  "description": "Published on team-registry.event.team_created.pub (stream ALL_EVENT) through the outbox after commit. NATS headers: team = admin, Nats-Msg-Id = team-registry-<publisher_seq>, request_id = the administrator request. occurred_at is the commit time. Consumers key their projection by team_id and deduplicate by (publisher, publisher_seq).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "publisher",
+    "publisher_seq",
+    "kind",
+    "occurred_at",
+    "team_id",
+    "team_name",
+    "default_image",
+    "ingested_at",
+    "archived_at"
+  ],
+  "properties": {
+    "publisher": {
+      "const": "team-registry"
+    },
+    "publisher_seq": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "kind": {
+      "const": "team_created"
+    },
+    "occurred_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "team_id": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "team_name": {
+      "type": "string",
+      "maxLength": 10,
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    },
+    "default_image": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\s@]+@[A-Za-z][A-Za-z0-9]*(?:[+._-][A-Za-z][A-Za-z0-9]*)*:[A-Za-z0-9=_-]+$"
+    },
+    "ingested_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "archived_at": {
+      "type": "null"
+    }
+  }
+}

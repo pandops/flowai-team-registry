@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flowai.local/schemas/team-registry/admin.update.request.schema.json",
+  "title": "Update a team",
+  "description": "Request body on team-registry.admin.update.pub. Headers: team = admin, request_id (decimal int64), admin_subject (administrator JWT subject). Backs PATCH /admin/teams/{team_id}. Reply: NATS header status and the Team body (admin.update.reply.schema.json) or an error body (error.reply.schema.json).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["params", "body"],
+  "properties": {
+    "params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["team_id"],
+      "properties": {
+        "team_id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        }
+      }
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "team_name": {
+          "description": "Team names never change after create: any string value is rejected with 400 team_name_immutable.",
+          "type": "string"
+        },
+        "default_image": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\s@]+@[A-Za-z][A-Za-z0-9]*(?:[+._-][A-Za-z][A-Za-z0-9]*)*:[A-Za-z0-9=_-]+$"
+        }
+      }
+    }
+  }
+}

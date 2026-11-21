@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flowai.local/schemas/team-registry/admin.archive.request.schema.json",
+  "title": "Archive a team",
+  "description": "Request body on team-registry.admin.archive.pub. Headers: team = admin, request_id (decimal int64), admin_subject (administrator JWT subject). Backs POST /admin/teams/{team_id}/archive. Reply: NATS header status and the Team body (admin.archive.reply.schema.json) or an error body (error.reply.schema.json).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["params"],
+  "properties": {
+    "params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["team_id"],
+      "properties": {
+        "team_id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flowai.local/schemas/team-registry/admin.archive.reply.schema.json",
+  "title": "Team",
+  "description": "Success reply body of team-registry.admin.archive.pub, status 201 for the first archive, 200 for a repeated one: exactly the canonical team fields.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "team_id",
+    "team_name",
+    "default_image",
+    "ingested_at",
+    "archived_at"
+  ],
+  "properties": {
+    "team_id": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "team_name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._~-]{1,63}$",
+      "not": {
+        "enum": [".", ".."]
+      }
+    },
+    "default_image": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\s@]+@[A-Za-z][A-Za-z0-9]*(?:[+._-][A-Za-z][A-Za-z0-9]*)*:[A-Za-z0-9=_-]+$"
+    },
+    "ingested_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "archived_at": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

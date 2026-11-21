@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flowai.local/schemas/team-registry/error.reply.schema.json",
+  "title": "Error",
+  "description": "Error reply body: status 400 invalid_request, 404 canonical_team_not_found, 400 team_name_immutable (PATCH body carries team_name), 409 team_conflict or 500 internal_error. request_id is absent only when the request carried no valid request_id header.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["code", "message"],
+  "properties": {
+    "code": {
+      "enum": [
+        "invalid_request",
+        "team_name_immutable",
+        "canonical_team_not_found",
+        "team_conflict",
+        "internal_error"
+      ]
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1
+    },
+    "request_id": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flowai.local/schemas/team-registry/service.get.request.schema.json",
+  "title": "Team point read",
+  "description": "Request body on team-registry.service.get.pub. Headers: team = the requested team_id in decimal, or admin for OIDC mapping registration; request_id. Callers: source-controller, executor-registry, API Gateway. Reply: NATS header status and the Team body (service.get.reply.schema.json) or an error body (error.reply.schema.json).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["params"],
+  "properties": {
+    "params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["team_id"],
+      "properties": {
+        "team_id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        }
+      }
+    }
+  }
+}
