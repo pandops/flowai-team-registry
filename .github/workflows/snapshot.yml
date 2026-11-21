@@ -216,6 +216,7 @@ jobs:
           check_digest
           record registry_verified
           printf '{}\n' > "$state/anonymous.json"
+          mkdir "$state/anonymous-pull"
           if skopeo copy --preserve-digests --src-authfile /state/anonymous.json \
               "$destination@$MANIFEST" dir:/state/anonymous-pull; then
             printf '%s  %s\n' "${MANIFEST#sha256:}" "$state/anonymous-pull/manifest.json" | sha256sum --check
