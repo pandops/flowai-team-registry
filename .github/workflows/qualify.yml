@@ -1,53 +1,46 @@
-name: Qualify team-registry
-
+name: Qualify and publish team-registry
 on:
   workflow_dispatch:
     inputs:
       expected_source_sha:
-        description: Full commit SHA of the selected team-registry ref
-        required: true
+        description: Selected application commit
         type: string
+        required: true
+      reuse_image:
+        description: Existing qualified image pin as JSON when production inputs are unchanged
+        type: string
+        required: false
 
 permissions:
   contents: read
 
 jobs:
-  qualify:
+  application:
+    name: Build and test the application
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 45
     env:
       EXPECTED_SOURCE_SHA: ${{ inputs.expected_source_sha }}
       GOTOOLCHAIN: local
       GOWORK: 'off'
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      stage: ${{ steps.version.outputs.stage }}
+      production_identity: ${{ steps.version.outputs.production_identity }}
+      reuse_digest: ${{ steps.version.outputs.reuse_digest }}
+      build_source_revision: ${{ steps.version.outputs.build_source_revision }}
+      binary_artifact_id: ${{ steps.binary.outputs.artifact-id }}
+      binary_sha256: ${{ steps.compile.outputs.sha256 }}
     steps:
-      - name: Verify dispatch SHA
+      - name: Bind qualification to the selected commit
         shell: bash
         run: |
-          if [[ ! "$EXPECTED_SOURCE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
-            echo 'expected_source_sha must be a 40-digit hexadecimal commit SHA.' >&2
-            exit 1
-          fi
-          if [[ "$GITHUB_SHA" != "${EXPECTED_SOURCE_SHA,,}" ]]; then
-            echo 'The dispatch ref does not resolve to expected_source_sha.' >&2
-            exit 1
-          fi
-
+          [[ "$EXPECTED_SOURCE_SHA" == "$GITHUB_SHA" ]]
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
-
-      - name: Verify checked-out source
-        shell: bash
-        run: |
-          if [[ "$(git rev-parse HEAD)" != "${EXPECTED_SOURCE_SHA,,}" ]]; then
-            echo 'The checkout does not match expected_source_sha.' >&2
-            exit 1
-          fi
-          if [[ ! -f go.mod ]]; then
-            echo 'Dispatch on the reviewed standalone candidate branch.' >&2
-            exit 1
-          fi
 
       - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
@@ -67,8 +60,150 @@ jobs:
           docker tag "$postgres" docker.io/library/postgres:16
           go test -mod=readonly -count=1 -coverpkg=./... -tags=integration -v ./test
 
-      - name: Build local Linux image
+      - name: Build the Linux application binary
+        id: compile
+        if: ${{ inputs.reuse_image == '' }}
         shell: bash
         run: |
-          docker build --platform linux/amd64 -f Containerfile --iidfile "$RUNNER_TEMP/team-registry.iid" .
-          cat "$RUNNER_TEMP/team-registry.iid"
+          mkdir "$RUNNER_TEMP/application"
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -buildvcs=false -trimpath \
+            -ldflags='-s -w' -o "$RUNNER_TEMP/application/app" ./cmd/team-registry
+          checksum="$(sha256sum "$RUNNER_TEMP/application/app")"
+          printf 'sha256=%s\n' "${checksum%% *}" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare the binary from this attempt
+        if: ${{ inputs.reuse_image == '' }}
+        shell: bash
+        run: mv "$RUNNER_TEMP/application/app" "$RUNNER_TEMP/application/app-$GITHUB_RUN_ATTEMPT"
+
+      - name: Retain the application binary
+        id: binary
+        if: ${{ inputs.reuse_image == '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: app-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/application/app-${{ github.run_attempt }}
+          archive: false
+          retention-days: 7
+          if-no-files-found: error
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: ${{ inputs.reuse_image == '' }}
+        with:
+          node-version: '24.20.0'
+          package-manager-cache: false
+
+      - name: Resolve the artifact version
+        id: version
+        shell: bash
+        env:
+          REUSE_PIN: ${{ inputs.reuse_image }}
+          PRODUCTION_PATHS: "[\"Containerfile.runtime\",\"cmd\",\"internal\",\"go.mod\",\"go.sum\",\"schemas\"]"
+          INITIAL_IMPORT: ""
+          BUILD_RECIPE: "go1.26.2 CGO_ENABLED=0 linux/amd64 -mod=readonly -buildvcs=false -trimpath -ldflags=-s -w"
+        run: |
+          mapfile -t paths < <(jq -er '.[]' <<< "$PRODUCTION_PATHS")
+          production_tree() {
+            {
+              git ls-tree -r "$1" -- "${paths[@]}" | sed '/_test\.go$/d'
+              printf '%s\n' "$BUILD_RECIPE"
+            } | sha256sum | cut -d ' ' -f1
+          }
+          identity="$(production_tree "$GITHUB_SHA")"
+          printf 'production_identity=sha256:%s\n' "$identity" >> "$GITHUB_OUTPUT"
+          release_branch="$GITHUB_REF_NAME"
+          stable='(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'
+          version_pattern="^${stable}$"
+          stage=stable
+          if [[ "$release_branch" != master ]]; then
+            stage=snapshot
+            # Give each distinct input set its own prerelease channel. This
+            # also separates it from the earlier pilot snapshots in GHCR.
+            channel="snapshot-${identity:0:16}"
+            release_branch="$channel"
+            version_pattern="^${stable}-${channel}\.[1-9][0-9]*$"
+          fi
+          printf 'stage=%s\n' "$stage" >> "$GITHUB_OUTPUT"
+
+          if [[ -n "$REUSE_PIN" ]]; then
+            build_source="$(jq -er '.buildSourceRevision | select(test("^[a-f0-9]{40}$"))' <<< "$REUSE_PIN")"
+            digest="$(jq -er '.imageDigest | select(test("^sha256:[a-f0-9]{64}$"))' <<< "$REUSE_PIN")"
+            version="$(jq -er .version <<< "$REUSE_PIN")"
+            [[ "$(production_tree "$build_source")" == "$identity" ]]
+            if [[ "$stage" == stable ]]; then
+              [[ "$version" =~ ^${stable}$ ]]
+            else
+              [[ "$version" =~ ^${stable}-[0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*$ ]]
+            fi
+            printf 'version=%s\nbuild_source_revision=%s\nreuse_digest=%s\n' \
+              "$version" "$build_source" "$digest" >> "$GITHUB_OUTPUT"
+            exit
+          fi
+          printf 'build_source_revision=%s\n' "$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+
+          mapfile -t existing < <(git tag --points-at "$GITHUB_SHA" | awk '/^v/ {print substr($0,2)}')
+          for version in "${existing[@]}"; do
+            if [[ "$version" =~ $version_pattern ]]; then
+              printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+              exit
+            fi
+          done
+
+          lock_root="$(mktemp -d "$RUNNER_TEMP/semantic-release.XXXXXXXX")"
+          trusted=https://raw.githubusercontent.com/pandops/flowai-team-registry/c18e7cdde5d5b976f549d1dc486f60776cbb8718/.github/semantic-release
+          for file in package.json package-lock.json; do
+            curl -q --fail --silent --show-error --proto '=https' --max-time 30 "$trusted/$file" -o "$lock_root/$file"
+          done
+          (cd "$lock_root" && sha256sum --check <<'LOCKS'
+          891ec3a55b9fccf0b49fe0ac0a98f9e9fd5bbd7f1743e0f0e51d6286a178d16b  package.json
+          aa53698b9420885d999a383abe2f5fafa453bd5aa938dc9ff3ce3e1ef42551a9  package-lock.json
+          LOCKS
+          npm ci --ignore-scripts --no-audit --no-fund)
+
+          mirror="$RUNNER_TEMP/version.git"
+          metadata="$RUNNER_TEMP/version-metadata"
+          git clone --quiet --bare --shared "$GITHUB_WORKSPACE" "$mirror"
+          git -C "$mirror" update-ref "refs/heads/$release_branch" "$GITHUB_SHA"
+          if [[ "$release_branch" != master ]]; then
+            git -C "$mirror" update-ref refs/heads/master "$(git rev-parse refs/remotes/origin/master)"
+          fi
+          git init --quiet --initial-branch="$release_branch" "$metadata"
+          git -C "$metadata" remote add origin "$mirror"
+          git -C "$metadata" fetch --quiet --tags origin "refs/heads/$release_branch:refs/version-source"
+          git -C "$metadata" update-ref "refs/heads/$release_branch" "$GITHUB_SHA"
+
+          jq -n --arg branch "$release_branch" --arg header "$INITIAL_IMPORT" '{
+            branches: (["master"] + if $branch == "master" then [] else [{name:$branch, prerelease:$branch, channel:$branch}] end),
+            plugins: [["@semantic-release/commit-analyzer",
+                       {releaseRules: (if $header == "" then [] else [{header:$header,release:"minor"}] end)}]],
+            tagFormat: "v${version}"
+          }' > "$metadata/.releaserc.json"
+          log="$RUNNER_TEMP/semantic-release.log"
+          (
+            cd "$metadata"
+            env -i PATH="$PATH" HOME="$metadata" LANG=C.UTF-8 NO_COLOR=1 \
+              GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0 \
+              "$lock_root/node_modules/.bin/semantic-release" --dry-run --no-ci --repository-url "$mirror"
+          ) 2>&1 | tee "$log"
+          version="$(sed -n 's/^.*[Tt]he next release version is //p' "$log")"
+          [[ "$version" =~ $version_pattern ]]
+          grep -Fq "Skip v$version tag creation in dry-run mode" "$log"
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+
+  container:
+    name: Build and publish the runtime container
+    needs: application
+    permissions:
+      actions: read
+      contents: write
+      packages: write
+    uses: ./.github/workflows/v0052-build-push.yml
+    with:
+      binary_artifact_id: ${{ needs.application.outputs.binary_artifact_id }}
+      binary_sha256: ${{ needs.application.outputs.reuse_digest == '' && needs.application.outputs.binary_sha256 || '' }}
+      version: ${{ needs.application.outputs.version }}
+      runtime_files: '[]'
+      qualification: ${{ format('{{"unit":"success","integration":"success","schemaInputs":{0}}}', '[]') }}
+      reuse_digest: ${{ needs.application.outputs.reuse_digest }}
+      build_source_revision: ${{ needs.application.outputs.build_source_revision }}
+      production_identity: ${{ needs.application.outputs.production_identity }}

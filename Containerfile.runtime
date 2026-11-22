@@ -1,0 +1,5 @@
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:52dcfbabb7457ea47c82f6e13af8c8a4a1d9f7b0145142b3ecab20f2b888411d
+COPY --chmod=0555 app /team-registry
+USER 65532:65532
+EXPOSE 8080
+ENTRYPOINT ["/team-registry", "--config", "/etc/flowai/config.yaml"]
