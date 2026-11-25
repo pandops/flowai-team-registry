@@ -1,0 +1,22 @@
+# team-registry configuration, mounted at /etc/flowai/config.yaml.
+# Every key is listed; <...> marks a value the deployment must supply.
+# Unknown keys are rejected and startup fails while a placeholder remains.
+http:
+  listen: ":8080" # probes only: /v1/livez and /v1/readyz
+db:
+  host: <PostgreSQL host>
+  port: 5432
+  user: <team-registry database role>
+  password: <team-registry database password>
+  name: flowai
+  schema: team_registry_schema
+  sslmode: verify-full # the only accepted value
+  ca_file: /run/flowai/stand-ca/ca.pem
+nats:
+  url: <tls://host:port of the NATS server>
+  credentials_file: /run/flowai/nats/user.creds
+  ca_file: /run/flowai/stand-ca/ca.pem
+  inbox_prefix: _INBOX.team-registry
+  request_timeout: 5s
+outbox:
+  poll_interval: 500ms

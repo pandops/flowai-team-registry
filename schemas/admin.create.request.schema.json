@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flowai.local/schemas/team-registry/admin.create.request.schema.json",
+  "title": "Create a team",
+  "description": "Request body on team-registry.admin.create.pub. Headers: team = admin, request_id (decimal int64), admin_subject (administrator JWT subject). Backs POST /admin/teams. Reply: NATS header status and the Team body (admin.create.reply.schema.json) or an error body (error.reply.schema.json).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["body"],
+  "properties": {
+    "params": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 0
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["team_name", "default_image"],
+      "properties": {
+        "team_name": {
+          "type": "string",
+          "maxLength": 10,
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+        },
+        "default_image": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\s@]+@[A-Za-z][A-Za-z0-9]*(?:[+._-][A-Za-z][A-Za-z0-9]*)*:[A-Za-z0-9=_-]+$"
+        }
+      }
+    }
+  }
+}

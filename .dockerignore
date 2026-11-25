@@ -1,0 +1,7 @@
+*
+!Containerfile
+!go.mod
+!go.sum
+!cmd/
+!internal/
+!schemas/

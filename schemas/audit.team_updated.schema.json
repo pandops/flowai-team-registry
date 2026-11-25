@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flowai.local/schemas/team-registry/audit.team_updated.schema.json",
+  "title": "Audit of team_updated",
+  "description": "Published on team-registry.audit.team_updated.pub (stream ALL_AUDIT) through the outbox, one per administrator request of PATCH /admin/teams/{team_id} (team-registry.admin.update), successful or rejected. NATS headers: team = admin, Nats-Msg-Id = team-registry-<publisher_seq>, request_id. team_id names the team the request concerns (the created team for a successful create) and is absent for a failed create or an unknown or invalid team_id; resource_id equals team_id, or null when absent. Carries no JWT or key material.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "publisher",
+    "publisher_seq",
+    "occurred_at",
+    "source_service",
+    "actor_type",
+    "actor_subject",
+    "action",
+    "resource_type",
+    "resource_id",
+    "request_id",
+    "outcome"
+  ],
+  "properties": {
+    "publisher": {
+      "const": "team-registry"
+    },
+    "publisher_seq": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "team_id": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "occurred_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "source_service": {
+      "const": "team-registry"
+    },
+    "actor_type": {
+      "const": "administrator"
+    },
+    "actor_subject": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "action": {
+      "const": "team_updated"
+    },
+    "resource_type": {
+      "const": "team"
+    },
+    "resource_id": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "request_id": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "outcome": {
+      "enum": ["succeeded", "rejected"]
+    },
+    "reason": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "changes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "team_name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._~-]{1,63}$",
+          "not": {
+            "enum": [".", ".."]
+          }
+        },
+        "default_image": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\s@]+@[A-Za-z][A-Za-z0-9]*(?:[+._-][A-Za-z][A-Za-z0-9]*)*:[A-Za-z0-9=_-]+$"
+        },
+        "old_default_image": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\s@]+@[A-Za-z][A-Za-z0-9]*(?:[+._-][A-Za-z][A-Za-z0-9]*)*:[A-Za-z0-9=_-]+$"
+        },
+        "new_default_image": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\s@]+@[A-Za-z][A-Za-z0-9]*(?:[+._-][A-Za-z][A-Za-z0-9]*)*:[A-Za-z0-9=_-]+$"
+        },
+        "archived_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "succeeded"
+          }
+        }
+      },
+      "then": {
+        "required": ["team_id"],
+        "properties": {
+          "resource_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9223372036854775807
+          }
+        },
+        "not": {
+          "required": ["reason"]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "rejected"
+          }
+        }
+      },
+      "then": {
+        "required": ["reason"]
+      }
+    },
+    {
+      "if": {
+        "required": ["team_id"]
+      },
+      "then": {
+        "properties": {
+          "resource_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9223372036854775807
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "resource_id": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ]
+}
